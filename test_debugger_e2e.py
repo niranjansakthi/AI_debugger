@@ -4,7 +4,7 @@ from repository.embeddings.embedder import CodeEmbedder
 from repository.embeddings.vector_store import CodeVectorStore
 from repository.models.code_chunk import CodeChunk
 from repository.ai.retriever import CodeRetriever
-from repository.ai.context_builder import CodeContextBuilder
+from repository.ai.context_builder import RepositoryContextBuilder
 from repository.ai.debugger import RepositoryDebugger
 
 def test_debugger():
@@ -70,7 +70,7 @@ def test_debugger():
         
         # 4. Setup AI Components
         retriever = CodeRetriever(embedder, vector_store)
-        context_builder = CodeContextBuilder()
+        context_builder = RepositoryContextBuilder()
         debugger = RepositoryDebugger(retriever, context_builder)
         
         # 5. Execute Test Cases

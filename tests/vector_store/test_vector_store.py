@@ -14,7 +14,7 @@ def make_chunk():
 
 def test_chunk_id_is_deterministic(tmp_path):
     store = CodeVectorStore(
-        persist_path=str(tmp_path / "chroma")
+        persist_directory=str(tmp_path / "chroma")
     )
     chunk = make_chunk()
     first = store._chunk_id(chunk)
@@ -23,7 +23,7 @@ def test_chunk_id_is_deterministic(tmp_path):
 
 def test_different_chunks_have_different_ids(tmp_path):
     store = CodeVectorStore(
-        persist_path=str(tmp_path / "chroma")
+        persist_directory=str(tmp_path / "chroma")
     )
     first = make_chunk()
     second = CodeChunk(
@@ -38,7 +38,7 @@ def test_different_chunks_have_different_ids(tmp_path):
 
 def test_embedding_chunk_count_must_match(tmp_path):
     store = CodeVectorStore(
-        persist_path=str(tmp_path / "chroma")
+        persist_directory=str(tmp_path / "chroma")
     )
     chunks = [
         make_chunk(),

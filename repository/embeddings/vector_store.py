@@ -8,10 +8,10 @@ class CodeVectorStore:
     def __init__(
         self,
         collection_name: str = "repository_code",
-        persist_path: str = "./chroma_db",
+        persist_directory: str = "./chroma_db",
     ):
         self.client = chromadb.PersistentClient(
-            path=persist_path
+            path=str(persist_directory)
         )
 
         self.collection = self.client.get_or_create_collection(

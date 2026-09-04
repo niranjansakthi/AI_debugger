@@ -21,7 +21,7 @@ def test_add_and_search(tmp_path):
 
     store = CodeVectorStore(
         collection_name="test_repository_code",
-        persist_path=str(tmp_path / "chroma"),
+        persist_directory=str(tmp_path / "chroma"),
     )
 
     chunks = [

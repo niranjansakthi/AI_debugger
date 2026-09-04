@@ -1,4 +1,4 @@
-from repository.ai.context_builder import CodeContextBuilder
+from repository.ai.context_builder import RepositoryContextBuilder
 from repository.ai.retriever import CodeRetriever
 
 
@@ -7,7 +7,7 @@ class RepositoryDebugger:
     def __init__(
         self,
         retriever: CodeRetriever,
-        context_builder: CodeContextBuilder,
+        context_builder: RepositoryContextBuilder,
     ):
         self.retriever = retriever
         self.context_builder = context_builder
