@@ -76,15 +76,19 @@ def test_registry_executes_correct_tool():
     tool = setup_search_tool()
     registry.register(tool)
     
-    result = registry.execute("search_code", query="my search query")
-    assert result == "fake_chunk"
+    result = registry.execute("call_1", "search_code", query="my search query")
+    assert result.success is True
+    assert result.content == "fake_chunk"
+    assert result.tool_call_id == "call_1"
 
 
 # Test 6: registry.execute("unknown_tool", ...) -> controlled error
 def test_registry_unknown_tool_raises_error():
     registry = ToolRegistry()
-    with pytest.raises(ValueError, match="Unknown tool: 'unknown_tool'"):
-        registry.execute("unknown_tool", query="something")
+    result = registry.execute("call_2", "unknown_tool", query="something")
+    assert result.success is False
+    assert "Unknown tool: 'unknown_tool'" in result.error
+    assert result.tool_call_id == "call_2"
 
 
 # Test 7: Add a fake second tool just to prove the architecture works
@@ -97,8 +101,11 @@ def test_registry_handles_multiple_tools():
     registry.register(dummy_tool)
     
     # Both tools should execute successfully without registry modifying its internal logic
-    search_result = registry.execute("search_code", query="test query")
-    dummy_result = registry.execute("dummy_tool", name="Alice")
+    search_result = registry.execute("call_3", "search_code", query="test query")
+    dummy_result = registry.execute("call_4", "dummy_tool", name="Alice")
     
-    assert search_result == "fake_chunk"
-    assert dummy_result == "Hello, Alice!"
+    assert search_result.success is True
+    assert search_result.content == "fake_chunk"
+    
+    assert dummy_result.success is True
+    assert dummy_result.content == "Hello, Alice!"

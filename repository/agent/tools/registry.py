@@ -1,4 +1,5 @@
 from typing import Any, Dict
+from repository.agent.results.models import ToolResult
 
 class ToolRegistry:
     def __init__(self):
@@ -10,17 +11,34 @@ class ToolRegistry:
             raise ValueError("Tool must have a 'name' attribute.")
         self._tools[tool.name] = tool
 
-    def execute(self, tool_name: str, **kwargs) -> Any:
-        """Find a tool, validate inputs, and execute it."""
+    def execute(self, tool_call_id: str, tool_name: str, **kwargs) -> ToolResult:
+        """Find a tool, validate inputs, and execute it. Returns a ToolResult."""
         if tool_name not in self._tools:
-            raise ValueError(f"Unknown tool: '{tool_name}'")
+            return ToolResult(
+                tool_call_id=tool_call_id,
+                success=False,
+                error=f"Unknown tool: '{tool_name}'"
+            )
 
         tool = self._tools[tool_name]
         
-        if hasattr(tool, 'args_schema') and tool.args_schema is not None:
-            # Validate input arguments against Pydantic schema
-            validated_args = tool.args_schema(**kwargs)
-            # Pass validated arguments to the execute method
-            return tool.execute(**validated_args.model_dump())
-        else:
-            return tool.execute(**kwargs)
+        try:
+            if hasattr(tool, 'args_schema') and tool.args_schema is not None:
+                # Validate input arguments against Pydantic schema
+                validated_args = tool.args_schema(**kwargs)
+                # Pass validated arguments to the execute method
+                output = tool.execute(**validated_args.model_dump())
+            else:
+                output = tool.execute(**kwargs)
+                
+            return ToolResult(
+                tool_call_id=tool_call_id,
+                success=True,
+                content=str(output)
+            )
+        except Exception as e:
+            return ToolResult(
+                tool_call_id=tool_call_id,
+                success=False,
+                error=str(e)
+            )
