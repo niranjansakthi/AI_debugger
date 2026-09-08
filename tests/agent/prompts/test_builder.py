@@ -1,6 +1,7 @@
 from repository.agent.prompts.builder import PromptBuilder
 from repository.agent.state.models import ChatMessage, MessageRole
 from repository.agent.tools.search_code import SearchCodeTool
+from repository.agent.planning.models import Plan, PlanStep, PlanStepStatus
 
 
 class DummyInspectFileTool:
@@ -66,3 +67,37 @@ def test_no_hardcoded_tools():
     
     assert inspect_tool.name in prompt
     assert search_tool.name not in prompt  # Proves the prompt is dynamic!
+
+
+def test_plan_appears():
+    # Test 6 — plan appears
+    plan = Plan(
+        steps=[
+            PlanStep(description="Step A", status=PlanStepStatus.COMPLETED),
+            PlanStep(description="Step B", status=PlanStepStatus.IN_PROGRESS),
+        ],
+        current_step=1
+    )
+    
+    prompt = PromptBuilder.build(goal="test", plan=plan)
+    
+    assert "# Current Plan" in prompt
+    assert "[completed] Step A" in prompt
+    assert "[in_progress] Step B" in prompt
+    assert "# Current Step\nStep B" in prompt
+
+
+def test_memory_appears():
+    # Test 7 — memory appears
+    from repository.agent.memory.models import Memory
+    
+    memories = [
+        Memory(key="auth", content="JWT authentication is handled in auth/service.py"),
+        Memory(key="db", content="PostgreSQL is used for persistence")
+    ]
+    
+    prompt = PromptBuilder.build(goal="test", memories=memories)
+    
+    assert "# Project Memory" in prompt
+    assert "- JWT authentication is handled in auth/service.py" in prompt
+    assert "- PostgreSQL is used for persistence" in prompt

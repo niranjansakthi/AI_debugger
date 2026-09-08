@@ -1,4 +1,4 @@
-from typing import Any, Protocol
+from typing import Any, Protocol, Optional
 
 from repository.agent.state.models import (
     AgentState,
@@ -8,6 +8,8 @@ from repository.agent.state.models import (
     ToolCall,
 )
 from repository.agent.tools.registry import ToolRegistry
+from repository.agent.memory.store import MemoryStore
+from repository.agent.prompts.builder import PromptBuilder
 
 
 class LLMClient(Protocol):
@@ -27,10 +29,12 @@ class AgentRunner:
         self,
         llm: LLMClient,
         tool_registry: ToolRegistry,
+        memory_store: Optional[MemoryStore] = None,
         max_iterations: int = 5,
     ) -> None:
         self.llm = llm
         self.tool_registry = tool_registry
+        self.memory_store = memory_store
         self.max_iterations = max_iterations
 
     def run(self, goal: str) -> AgentState:
@@ -49,9 +53,20 @@ class AgentRunner:
         while state.iteration < self.max_iterations:
             state.iteration += 1
 
+            memories = self.memory_store.search(state.goal) if self.memory_store else None
+            
+            system_content = PromptBuilder.build(
+                goal=state.goal,
+                tools=self.tool_registry.get_all_tools(),
+                plan=state.plan,
+                memories=memories
+            )
+            
+            system_message = ChatMessage(role="system", content=system_content)
+
             try:
                 response = self.llm.invoke(
-                    state.messages
+                    [system_message] + state.messages
                 )
             except Exception as exc:
                 state.status = IterationStatus.FAILED

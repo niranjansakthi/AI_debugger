@@ -1,31 +1,56 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from repository.agent.prompts.system import SYSTEM_PROMPT, TOOL_USAGE_TEMPLATE
 from repository.agent.state.models import ChatMessage
+from repository.agent.planning.models import Plan, PlanStepStatus
+from repository.agent.memory.models import Memory
 
 
 class PromptBuilder:
     """Builds and manages prompts for the Agent."""
 
     @staticmethod
-    def build(goal: str, tools: List[Any] = None, conversation: List[ChatMessage] = None) -> str:
+    def build(
+        goal: str, 
+        tools: List[Any] = None, 
+        conversation: List[ChatMessage] = None,
+        plan: Optional[Plan] = None,
+        memories: Optional[List[Memory]] = None
+    ) -> str:
         """
         Constructs the complete prompt including system directives,
-        tool descriptions, the current goal, and conversation history.
+        project memory, tool descriptions, the current goal, plan progress, 
+        and conversation history.
         """
         # 1. System Prompt
         prompt = SYSTEM_PROMPT.strip()
 
-        # 2. Tool Usage
+        # 2. Project Memory
+        if memories:
+            prompt += "\n\n# Project Memory"
+            for mem in memories:
+                prompt += f"\n- {mem.content}"
+
+        # 3. Tool Usage
         if tools:
             tool_descriptions = PromptBuilder._format_tools(tools)
             tool_section = TOOL_USAGE_TEMPLATE.format(tool_descriptions=tool_descriptions)
             prompt += f"\n\n{tool_section.strip()}"
 
-        # 3. Goal
+        # 4. Goal
         prompt += f"\n\n# Goal\n{goal}"
 
-        # 4. Conversation History
+        # 5. Plan
+        if plan and plan.steps:
+            prompt += "\n\n# Current Plan"
+            for idx, step in enumerate(plan.steps):
+                status_str = step.status.value
+                prompt += f"\n{idx + 1}. [{status_str}] {step.description}"
+            
+            if 0 <= plan.current_step < len(plan.steps):
+                prompt += f"\n\n# Current Step\n{plan.steps[plan.current_step].description}"
+
+        # 6. Conversation History
         if conversation:
             prompt += "\n\n# Conversation History"
             for msg in conversation:

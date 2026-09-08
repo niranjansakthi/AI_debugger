@@ -11,6 +11,10 @@ class ToolRegistry:
             raise ValueError("Tool must have a 'name' attribute.")
         self._tools[tool.name] = tool
 
+    def get_all_tools(self) -> list[Any]:
+        """Returns a list of all registered tools."""
+        return list(self._tools.values())
+
     def execute(self, tool_call_id: str, tool_name: str, **kwargs) -> ToolResult:
         """Find a tool, validate inputs, and execute it. Returns a ToolResult."""
         if tool_name not in self._tools:
