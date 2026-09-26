@@ -1,14 +1,19 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import initalrouter
+from app.api.routes import initalrouter, debug
+from app.api.routes import debug_stream, evaluation
 from app.core.exception import register_exception_handlers
 from app.core.logger import logger
 
 from app.schemas.response import APIResponse
 from app.db.session import  get_db,Base,engine
 from sqlalchemy import text
+import os
+from pathlib import Path
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,8 +37,6 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutting down...")
 
     
-
-    
     # Application Shutdown
      
     logger.info("Application shutting down...")
@@ -45,7 +48,23 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS — allow frontend dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # permissive for local dev
+    allow_credentials=False,      # must be False when allow_origins=["*"]
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 register_exception_handlers(app)
 
 app.include_router(initalrouter.router)
+app.include_router(debug.router)
+app.include_router(debug_stream.router)
+app.include_router(evaluation.router)
+
+# Serve frontend build if it exists
+frontend_dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")

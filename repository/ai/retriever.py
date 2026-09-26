@@ -1,6 +1,6 @@
 from repository.embeddings.embedder import CodeEmbedder
-from repository.embeddings.vector_store import CodeVectorStore
 from repository.models.code_chunk import CodeChunk
+from repository.embeddings.vector_store import CodeVectorStore
 
 
 class CodeRetriever:
@@ -18,6 +18,9 @@ class CodeRetriever:
         question: str,
         top_k: int = 5,
     ) -> list[CodeChunk]:
+        # FIX 4: guard empty / whitespace queries
+        if not question or not question.strip():
+            return []
 
         query_embedding = self.embedder.embed(
             [question]

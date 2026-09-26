@@ -19,6 +19,18 @@ class CodeVectorStore:
             metadata={"hnsw:space": "cosine"},
         )
 
+    def clear(self) -> None:
+        """
+        FIX A: Delete and recreate the collection so stale chunks
+        from previous runs never pollute a fresh debug session.
+        """
+        name = self.collection.name
+        self.client.delete_collection(name)
+        self.collection = self.client.get_or_create_collection(
+            name=name,
+            metadata={"hnsw:space": "cosine"},
+        )
+
     def _chunk_id(self, chunk: CodeChunk) -> str:
         return f"{chunk.file_path}:{chunk.start_line}:{chunk.end_line}"
 
@@ -67,10 +79,18 @@ class CodeVectorStore:
         query_embedding: list[float],
         top_k: int = 5,
     ) -> list[CodeChunk]:
+        # FIX 5: guard against empty collection crash
+        count = self.collection.count()
+        if count == 0:
+            return []
+
+        actual_k = min(top_k, count)
+        if actual_k <= 0:
+            return []
 
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k,
+            n_results=actual_k,
         )
 
         chunks = []

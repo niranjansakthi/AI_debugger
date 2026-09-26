@@ -54,6 +54,12 @@ class AgentState(BaseModel):
     iteration: int = Field(default=0)
     status: IterationStatus = Field(default=IterationStatus.PENDING)
     
+    # 7.2 Token & Cost tracking
+    input_tokens: int = Field(default=0)
+    output_tokens: int = Field(default=0)
+    total_tokens: int = Field(default=0)
+    estimated_cost: float = Field(default=0.0)
+    
     def add_message(self, message: ChatMessage):
         self.messages.append(message)
 
@@ -65,3 +71,9 @@ class AgentState(BaseModel):
 
     def increment_iteration(self):
         self.iteration += 1
+
+    def add_usage(self, input_toks: int, output_toks: int, cost: float):
+        self.input_tokens += input_toks
+        self.output_tokens += output_toks
+        self.total_tokens += (input_toks + output_toks)
+        self.estimated_cost += cost

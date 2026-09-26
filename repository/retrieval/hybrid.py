@@ -88,6 +88,10 @@ class HybridRetriever:
             for chunk_id in ranked_ids
         ]
 
+    def retrieve(self, query: str, top_k: int = 5) -> list[CodeChunk]:
+        """Alias for search() — matches the interface expected by SearchCodeTool."""
+        return self.search(query, top_k=top_k)
+
     def _chunk_id(
         self,
         chunk: CodeChunk,

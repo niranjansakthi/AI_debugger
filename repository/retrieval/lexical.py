@@ -63,19 +63,23 @@ class BM25Retriever:
         self,
         chunk: CodeChunk,
     ) -> str:
-
-        return " ".join(
-            [
-                chunk.file_path,
-                chunk.chunk_type,
-                chunk.name or "",
-                chunk.content,
-            ]
-        )
+        parts = [
+            chunk.file_path,
+            chunk.chunk_type,
+            chunk.name or "",
+            chunk.content,
+        ]
+        # FIX 8 (partial): include docstring in BM25 document text
+        if chunk.docstring:
+            parts.append(chunk.docstring)
+        return " ".join(parts)
 
     def _tokenize(self, text: str) -> list[str]:
-
+        # FIX 7: split camelCase before lowercasing so
+        # "applyDiscount" → ["apply", "discount"]
+        text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+        text = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", text)
         return re.findall(
-            r"[A-Za-z_][A-Za-z0-9_]*",
+            r"[A-Za-z0-9_][A-Za-z0-9_]*",
             text.lower(),
         )

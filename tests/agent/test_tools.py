@@ -6,7 +6,7 @@ from repository.agent.tools.search_code import SearchCodeTool, SearchCodeInput
 
 
 class FakeRetriever:
-    def search(self, query: str, top_k: int = 5):
+    def retrieve(self, query: str, top_k: int = 5):
         if query == "find nothing":
             return []
         return ["fake_chunk"]

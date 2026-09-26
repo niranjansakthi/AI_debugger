@@ -20,6 +20,8 @@ class CodeReader:
 
     def __init__(self, language_detector: LanguageDetector):
         self._language_detector = language_detector
+        # 7.4 Caching: store path -> (mtime, CodeDocument)
+        self._cache = {}
 
     def _decode_raw_bytes(self, raw_bytes: bytes) -> tuple[str, str]:
         for encoding in SUPPORTED_ENCODINGS:
@@ -53,6 +55,13 @@ class CodeReader:
         if not path.is_file():
             raise FileNotFoundError(f"No file found at: {path}")
 
+        # Check cache
+        current_mtime = path.stat().st_mtime
+        if path in self._cache:
+            cached_mtime, cached_doc = self._cache[path]
+            if current_mtime == cached_mtime:
+                return cached_doc
+
         if self._is_binary_file(path):
             raise ValueError(f"Binary file detected: {path}")
 
@@ -69,7 +78,7 @@ class CodeReader:
 
         file_hash = hashlib.sha256(raw_bytes).hexdigest()
         language = self._language_detector.detect(path)
-        return CodeDocument(
+        doc = CodeDocument(
             path=path,
             content=content,
             encoding=encoding,
@@ -77,3 +86,8 @@ class CodeReader:
             file_hash=file_hash,
             language=language,
         )
+        
+        # Update cache
+        self._cache[path] = (current_mtime, doc)
+        
+        return doc

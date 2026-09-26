@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-
-
+from pydantic import BaseModel, Field
 @dataclass
 class CodeChunk:
     content: str
@@ -20,6 +19,8 @@ class CodeChunk:
     decorators: list[str] | None = None
     docstring: str | None = None
     imports: list[str] | None = None
+
+
     
     @property
     def line_count(self) -> int:

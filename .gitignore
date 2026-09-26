@@ -6,3 +6,6 @@ __pycache__/
 venv/
 env/
 .venv/
+chroma_db/
+backend/chroma_db/
+superpowers-tmp/

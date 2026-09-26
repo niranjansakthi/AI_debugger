@@ -1,4 +1,4 @@
-from typing import Any, Protocol, Optional
+from typing import Any, Callable, Optional, Protocol
 
 from repository.agent.state.models import (
     AgentState,
@@ -10,6 +10,11 @@ from repository.agent.state.models import (
 from repository.agent.tools.registry import ToolRegistry
 from repository.agent.memory.store import MemoryStore
 from repository.agent.prompts.builder import PromptBuilder
+from repository.agent.cost import calculate_cost
+import logging
+import time
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient(Protocol):
@@ -37,7 +42,17 @@ class AgentRunner:
         self.memory_store = memory_store
         self.max_iterations = max_iterations
 
-    def run(self, goal: str) -> AgentState:
+    def run(
+        self,
+        goal: str,
+        on_event: Optional[Callable[[str, str, dict], None]] = None,
+    ) -> AgentState:
+        agent_start_time = time.time()
+        logger.info("agent_started: Goal received", extra={"goal_length": len(goal)})
+
+        if on_event:
+            on_event("agent_started", "Agent started reasoning", {"goal_length": len(goal)})
+
         state = AgentState(
             goal=goal,
             status=IterationStatus.RUNNING,
@@ -65,12 +80,45 @@ class AgentRunner:
             system_message = ChatMessage(role="system", content=system_content)
 
             try:
+                start_time = time.time()
                 response = self.llm.invoke(
                     [system_message] + state.messages
                 )
+                duration = time.time() - start_time
+                
+                # 7.2 Extract Token Usage & Calculate Cost
+                input_toks, output_toks, model_name = self._extract_usage(response)
+                cost = calculate_cost(model_name, input_toks, output_toks)
+                state.add_usage(input_toks, output_toks, cost)
+                
+                logger.info("llm_response: Received response from LLM", extra={"iteration": state.iteration, "duration": round(duration, 3)})
+                logger.info("token_usage: LLM call tokens", extra={
+                    "model": model_name,
+                    "input_tokens": input_toks,
+                    "output_tokens": output_toks,
+                    "total_tokens": input_toks + output_toks,
+                    "estimated_cost": cost
+                })
+                if on_event:
+                    on_event(
+                        "llm_response",
+                        f"LLM response (iteration {state.iteration})",
+                        {
+                            "iteration": state.iteration,
+                            "duration": round(duration, 3),
+                            "input_tokens": input_toks,
+                            "output_tokens": output_toks,
+                            "model": model_name,
+                        },
+                    )
+                
             except Exception as exc:
                 state.status = IterationStatus.FAILED
-
+                logger.error(
+                    "llm_error: LLM call raised exception",
+                    exc_info=True,
+                    extra={"iteration": state.iteration, "error": str(exc)},
+                )
                 state.observations.append(
                     Observation(
                         tool_call_id="llm_error",
@@ -94,20 +142,86 @@ class AgentRunner:
                 )
 
                 state.status = IterationStatus.COMPLETED
+                agent_duration = time.time() - agent_start_time
+                logger.info("agent_completed: Final answer generated", extra={"iteration": state.iteration, "result_size": len(final_content), "duration": round(agent_duration, 3)})
+                if on_event:
+                    on_event(
+                        "agent_completed",
+                        "Final diagnosis generated",
+                        {
+                            "iteration": state.iteration,
+                            "duration": round(agent_duration, 3),
+                            "is_final": True,
+                        },
+                    )
 
                 return state
 
             state.status = IterationStatus.AWAITING_TOOL
 
+            # Record the assistant's tool-call decision in the message history.
+            # The adapter needs this to correctly serialize the conversation for Groq
+            # (Groq requires the assistant turn to include the tool_calls array).
+            state.messages.append(
+                ChatMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=tool_calls,
+                )
+            )
+
             for tool_call in tool_calls:
                 state.tool_calls.append(tool_call)
+                logger.info("tool_called: Requesting tool", extra={"iteration": state.iteration, "tool_name": tool_call.name, "tool_call_id": tool_call.id})
+                if on_event:
+                    on_event(
+                        "tool_called",
+                        f"Tool: {tool_call.name}",
+                        {
+                            "iteration": state.iteration,
+                            "tool_name": tool_call.name,
+                            "tool_call_id": tool_call.id,
+                            "arguments": tool_call.arguments,
+                        },
+                    )
 
                 try:
+                    tool_start_time = time.time()
                     tool_result = self.tool_registry.execute(
                         tool_call.id,
                         tool_call.name,
                         **tool_call.arguments
                     )
+                    tool_duration = time.time() - tool_start_time
+                    
+                    if tool_result.success:
+                        logger.info("tool_completed: Tool execution successful", extra={"iteration": state.iteration, "tool_name": tool_call.name, "tool_call_id": tool_call.id, "duration": round(tool_duration, 3), "result_size": len(str(tool_result.content))})
+                        if on_event:
+                            on_event(
+                                "tool_completed",
+                                f"{tool_call.name} completed",
+                                {
+                                    "iteration": state.iteration,
+                                    "tool_name": tool_call.name,
+                                    "tool_call_id": tool_call.id,
+                                    "duration": round(tool_duration, 3),
+                                    "result_size": len(str(tool_result.content)),
+                                },
+                            )
+                    else:
+                        logger.error("tool_failed: Tool execution failed", extra={"iteration": state.iteration, "tool_name": tool_call.name, "tool_call_id": tool_call.id, "duration": round(tool_duration, 3), "error": str(tool_result.error)})
+                        if on_event:
+                            on_event(
+                                "tool_failed",
+                                f"{tool_call.name} failed",
+                                {
+                                    "iteration": state.iteration,
+                                    "tool_name": tool_call.name,
+                                    "tool_call_id": tool_call.id,
+                                    "duration": round(tool_duration, 3),
+                                    "error": str(tool_result.error),
+                                },
+                            )
 
                     observation = Observation(
                         tool_call_id=tool_result.tool_call_id,
@@ -116,6 +230,18 @@ class AgentRunner:
                     )
 
                 except Exception as exc:
+                    logger.error("tool_failed: Tool execution raised exception", extra={"iteration": state.iteration, "tool_name": tool_call.name, "tool_call_id": tool_call.id})
+                    if on_event:
+                        on_event(
+                            "tool_failed",
+                            f"{tool_call.name} failed",
+                            {
+                                "iteration": state.iteration,
+                                "tool_name": tool_call.name,
+                                "tool_call_id": tool_call.id,
+                                "error": str(exc),
+                            },
+                        )
                     observation = Observation(
                         tool_call_id=tool_call.id,
                         content=str(exc),
@@ -134,6 +260,9 @@ class AgentRunner:
             state.status = IterationStatus.RUNNING
 
         state.status = IterationStatus.FAILED
+        
+        agent_duration = time.time() - agent_start_time
+        logger.error("agent_completed: Stopped due to max iterations", extra={"iteration": state.iteration, "duration": round(agent_duration, 3)})
 
         state.observations.append(
             Observation(
@@ -196,3 +325,16 @@ class AgentRunner:
         )
 
         return str(content)
+
+    def _extract_usage(self, response: Any) -> tuple[int, int, str]:
+        """Extract input tokens, output tokens, and model name."""
+        input_tokens = 0
+        output_tokens = 0
+        model = getattr(response, "model", "unknown")
+        
+        usage = getattr(response, "usage", None)
+        if usage:
+            input_tokens = getattr(usage, "prompt_tokens", 0)
+            output_tokens = getattr(usage, "completion_tokens", 0)
+            
+        return input_tokens, output_tokens, model

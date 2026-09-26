@@ -22,12 +22,24 @@ class CodeChunker:
 
         imports = self._get_imports(tree)
 
-        return self._extract_chunks(
+        chunks = self._extract_chunks(
             document=document,
             nodes=tree.body,
             parent_name=None,
             imports=imports,
         )
+
+        # FIX 3: also emit module-level assignment chunks so global
+        # constants and top-level variables are reachable by the retriever
+        chunks.extend(
+            self._extract_module_assignments(
+                document=document,
+                nodes=tree.body,
+                imports=imports,
+            )
+        )
+
+        return chunks
 
     def _extract_chunks(
         self,
@@ -67,6 +79,52 @@ class CodeChunker:
                         imports=imports,
                     )
                 )
+
+        return chunks
+
+    def _extract_module_assignments(
+        self,
+        document: CodeDocument,
+        nodes: list[ast.stmt],
+        imports: list[str],
+    ) -> list[CodeChunk]:
+        """
+        FIX 3: emit one chunk per top-level assignment/constant so that
+        module-level bugs (e.g., wrong TAX_RATE) are visible to the retriever.
+        """
+        chunks: list[CodeChunk] = []
+
+        for node in nodes:
+            if not isinstance(
+                node, (ast.Assign, ast.AnnAssign, ast.AugAssign)
+            ):
+                continue
+
+            # Derive a readable name from the assignment target
+            name: str | None = None
+            if isinstance(node, ast.Assign):
+                if node.targets and isinstance(node.targets[0], ast.Name):
+                    name = node.targets[0].id
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name):
+                    name = node.target.id
+            elif isinstance(node, ast.AugAssign):
+                if isinstance(node.target, ast.Name):
+                    name = node.target.id
+
+            chunks.append(
+                CodeChunk(
+                    content=self._get_source(document.content, node),
+                    file_path=str(document.path),
+                    chunk_type="module_variable",
+                    name=name,
+                    start_line=node.lineno,
+                    end_line=node.end_lineno,
+                    parent_name=None,
+                    language=document.language.value,
+                    imports=imports,
+                )
+            )
 
         return chunks
 
@@ -131,6 +189,7 @@ class CodeChunker:
 
     def _get_docstring(self, node: ast.AST) -> str | None:
         return ast.get_docstring(node)
+
     def _get_imports(self, tree: ast.Module) -> list[str]:
         imports = []
         for node in tree.body:
