@@ -1,114 +1,88 @@
-# AI Debugger
+# AI Debugger 🕵️‍♂️💻
 
-The AI Debugger is an intelligent agent designed to autonomously investigate, diagnose, and explain bugs in software repositories. By integrating standard local analysis (AST parsing, code chunking, vector-based semantic search) with an LLM-based autonomous agent, it is able to perform context-aware reasoning on an entire codebase.
+AI Debugger is an autonomous, AI-powered developer tool that investigates and diagnoses bugs in public Git repositories. Simply provide a GitHub URL and a bug description, and the AI agent will clone the repository, index the codebase, and autonomously search through the code to pinpoint the root cause.
 
-This project is built using Python, FastAPI, ChromaDB, and Groq's high-speed inference.
+![AI Debugger UI](ChatGPT%20Image%20Sep%2014,%202026,%2012_01_55%20PM.png)
 
-## 1. High-Level Architecture
+## 🚀 Features
 
-The system operates using an "Ingest -> Index -> Reason -> Report" pipeline. 
+- **Autonomous Agent Loop**: An LLM-powered agent that forms hypotheses, searches codebases using tools, and iterates until it finds the root cause of the bug.
+- **Advanced Code Retrieval (RAG)**: Utilizes a **Hybrid Search** approach combining Semantic Search (ChromaDB + embeddings) and Lexical Search (BM25) with Reciprocal Rank Fusion (RRF) for highly accurate code chunk retrieval.
+- **Real-Time Execution Streaming**: Connects via Server-Sent Events (SSE) to stream live terminal logs, agent activity timelines, and metric updates directly to the frontend.
+- **Minimal Monochrome UI**: A sleek, zero-dependency HTML/CSS/JS frontend designed for a professional developer aesthetic (no neon, no gradients, purely engineered).
+- **Built-in Evaluation Framework**: Includes an evaluation suite to benchmark the pipeline against test datasets and measure retrieval accuracy and diagnostic success rates.
 
-```mermaid
-graph TD;
-    User[User via API] --> API[FastAPI Debug Route];
-    API --> Cloner[Repository Cloner];
-    Cloner --> Indexer[Indexing Pipeline];
-    Indexer --> Scanner[Repository Scanner];
-    Scanner --> Reader[Code Reader];
-    Reader --> Chunker[AST Chunker];
-    Chunker --> Embedder[Embeddings];
-    Embedder --> ChromaDB[(Chroma Vector Store)];
-    Indexer --> Agent[Agent Runner];
-    Agent <--> Tool[search_code Tool];
-    Tool <--> Retriever[Code Retriever];
-    Retriever <--> ChromaDB;
-    Agent --> Diagnosis[Final Diagnosis];
-    Diagnosis --> User;
+## 🏗️ Architecture
+
+- **Backend**: Python 3.12, FastAPI, Uvicorn
+- **AI/LLM**: Groq API (or any OpenAI-compatible provider)
+- **Vector Database**: ChromaDB (Local SQLite)
+- **Frontend**: Vanilla HTML5, CSS3, JavaScript (ES6)
+
+## 🛠️ Quickstart
+
+### 1. Prerequisites
+- Python 3.10+
+- Git installed on your system
+
+### 2. Setup the Backend
+Clone the repository and install the dependencies:
+```bash
+git clone https://github.com/niranjansakthi/AI_debugger.git
+cd AI_debugger
+python -m venv venv
+source venv/bin/activate  # Or `venv\Scripts\activate` on Windows
+pip install -r requirements.txt
 ```
 
-## 2. End-to-End Pipeline
-
-### Repository Ingestion
-When a URL is submitted via the `/debug` endpoint, the `RepositoryCloner` validates it (checking for shell injections, valid schemes) and executes a safe `git clone` into an ephemeral temporary directory that guarantees cleanup upon exit.
-
-### Code Indexing
-The `IndexingPipeline` scans the cloned repository for `.py` files. It reads, language-detects, and feeds them into the `CodeChunker`. The chunker breaks code down logically via AST (e.g., classes and functions). The chunks are sent to a HuggingFace SentenceTransformer (`CodeEmbedder`) and stored locally in ChromaDB.
-
-### Retrieval
-We utilize hybrid search capabilities. The `CodeRetriever` executes semantic search against the local vector store to extract relevant chunks of code. This code is passed through a `RepositoryContextBuilder` which formats it cleanly and applies necessary security boundaries (e.g. marking it as untrusted input).
-
-### Agent Loop and Tool Calling
-The core intelligence sits in the `AgentRunner`, an autonomous loop running against the `GroqAgentLLM`. Given the user's bug description, the agent decides which tools to call. Through the `search_code` tool, the agent incrementally queries the `CodeRetriever` and builds context in its memory state. 
-
-Once it is confident in its findings, it stops tool calling and returns the final explanation.
-
-### Evaluation Framework
-The project includes a robust evaluation suite (`tests/evaluation/`) capable of grading the agent on multiple metrics: Retrieval Score, Tool Selection, and Diagnosis Accuracy. This suite acts as a constant benchmark against regression.
-
-## 3. How to Run Locally
-
-### Requirements
-- Python 3.12+
-- Git
-
-### Environment Variables
-Create a `.env` file in the root directory:
-
+### 3. Environment Variables
+Create a `.env` file in the root directory and add your API keys. By default, the system uses the Groq API for LLM inference.
 ```env
 GROQ_API_KEY=your_groq_api_key_here
-HF_TOKEN=your_huggingface_token_here
-DATABASE_URL=sqlite:///./backend/test.db
+GROQ_MODEL=llama-3.1-70b-versatile
 ```
 
-### Running the Server
+### 4. Run the Application
 
-Start the FastAPI application via uvicorn:
+**Start the Backend Server:**
+```bash
+python run.py
+```
+*The backend will run on `http://localhost:8000`.*
+
+**Start the Frontend Client:**
+In a new terminal window, serve the frontend directory:
+```bash
+python -m http.server 5173 -d frontend
+```
+*Open `http://localhost:5173` in your browser to access the AI Debugger UI.*
+
+## 🧪 Testing
+
+The repository contains a full `pytest` suite covering unit tests and end-to-end integration tests.
 
 ```bash
-uvicorn backend.app.main:app --reload
+# Run the complete test suite
+python -m pytest tests/
+
+# Run the evaluation benchmark suite
+python -m pytest tests/evaluation/
 ```
 
-## 4. API Usage
+## 📂 Repository Structure
 
-### Example Request
+- `backend/app/`: FastAPI application, routes, schemas, and services.
+- `frontend/`: The minimal monochrome UI client.
+- `repository/`: Core business logic containing:
+  - `agent/`: The autonomous loop, LLM adapters, memory, and tools.
+  - `embeddings/`: Code chunk formatting and vector database integration.
+  - `evaluation/`: The internal framework for benchmarking AI performance.
+  - `ingestion/`: Git cloning and codebase AST indexing/chunking logic.
+  - `retrieval/`: Semantic, BM25, and Hybrid search implementations.
+- `tests/`: Comprehensive unit and integration test suite.
 
-```bash
-curl -X POST "http://localhost:8000/debug/" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "repo_url": "https://github.com/tiangolo/fastapi.git",
-           "bug_description": "There is a bug when resolving sub-dependencies in Dependency Injection."
-         }'
-```
+## 🤝 Contributing
+Contributions, issues, and feature requests are welcome! Feel free to check the issues page if you want to contribute.
 
-### Example Response
-
-```json
-{
-  "status": "success",
-  "diagnosis": "The bug occurs in `dependencies.py` inside the `solve_dependencies` function. The recursive call incorrectly passes the parent context instead of instantiating a new sub-context...",
-  "repository": "https://github.com/tiangolo/fastapi.git",
-  "metadata": {
-    "input_tokens": 1204,
-    "output_tokens": 405,
-    "total_tokens": 1609,
-    "estimated_cost": 0.0014,
-    "iterations": 3,
-    "files_indexed": 420,
-    "chunks_indexed": 1243
-  }
-}
-```
-
-## 5. Testing
-
-The codebase is fortified with over 150 unit and integration tests. No external internet or API access is required to run the test suite (it dynamically generates local git repositories and mocks LLM endpoints).
-
-```bash
-# Run all tests
-python -m pytest tests/ -v
-```
-
-## Limitations
-- Only public git repositories are currently supported via the `/debug` ingestion point.
-- The Indexing pipeline is currently restricted to `.py` (Python) files using the `ast` module. Other languages will be ignored.
+## 📝 License
+This project is open-source and available under the MIT License.
